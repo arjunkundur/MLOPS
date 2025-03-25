@@ -30,16 +30,17 @@ pipeline {
                     echo "Triggered SageMaker Training Job: ${trainingJobName}"
                     
                     // Poll the SageMaker training job status
-                    timeout(time: 60, unit: 'MINUTES') {  // Set a timeout for the wait
+                    timeout(time: 60, unit: 'MINUTES') {
                         waitUntil {
-                            def status = sh(script: "aws sagemaker describe-training-job --region $AWS_REGION --training-job-name ${trainingJobName} --query 'TrainingJobStatus' --output text", returnStdout: true).trim()
+                            // Fix: Enclosing training job name in quotes to prevent parsing issues
+                            def status = sh(script: "aws sagemaker describe-training-job --region $AWS_REGION --training-job-name '${trainingJobName}' --query 'TrainingJobStatus' --output text", returnStdout: true).trim()
                             echo "Current SageMaker Training Job Status: ${status}"
                             return status == "Completed" || status == "Failed" || status == "Stopped"
                         }
                     }
 
                     // Check the final status and fail the pipeline if it's not successful
-                    def finalStatus = sh(script: "aws sagemaker describe-training-job --region $AWS_REGION --training-job-name ${trainingJobName} --query 'TrainingJobStatus' --output text", returnStdout: true).trim()
+                    def finalStatus = sh(script: "aws sagemaker describe-training-job --region $AWS_REGION --training-job-name '${trainingJobName}' --query 'TrainingJobStatus' --output text", returnStdout: true).trim()
                     if (finalStatus != "Completed") {
                         error "SageMaker Training Job failed with status: ${finalStatus}"
                     }
