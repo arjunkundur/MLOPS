@@ -1,8 +1,8 @@
 pipeline {
-    agent any  // Use the Jenkins master node (or any available agent)
-    
+    agent any
+
     environment {
-        AWS_REGION = 'us-west-2'      // Set your AWS region
+        AWS_REGION = 'us-west-2'
         S3_BUCKET = 'jenkinsaws-mlops3030'
     }
 
@@ -11,8 +11,8 @@ pipeline {
             steps {
                 echo 'Setting up Python environment and installing required libraries...'
                 sh '''
-                # Install Python dependencies globally (assuming Python and pip are already installed)
-                pip install --upgrade boto3 sagemaker pandas scikit-learn
+                # Use python3 and pip3 explicitly if pip is not found
+                pip3 install --upgrade boto3 sagemaker pandas scikit-learn
                 '''
             }
         }
@@ -28,7 +28,7 @@ pipeline {
             steps {
                 echo 'Executing SageMaker training pipeline...'
                 sh '''
-                python sagemaker-pipelines-train-pipeline.py
+                python3 sagemaker-pipelines-train-pipeline.py
                 '''
             }
         }
@@ -37,7 +37,7 @@ pipeline {
             steps {
                 echo 'Monitoring the SageMaker pipeline status...'
                 sh '''
-                python monitor-pipeline-status.py
+                python3 monitor-pipeline-status.py
                 '''
             }
         }
@@ -46,7 +46,7 @@ pipeline {
             steps {
                 echo 'Running inference on test data...'
                 sh '''
-                python sagemaker-inference.py
+                python3 sagemaker-inference.py
                 '''
             }
         }
