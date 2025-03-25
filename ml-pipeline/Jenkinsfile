@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         AWS_REGION = 'ap-south-1'
-        SAGEMAKER_PROJECT = 'my-sagemaker-jenkins-project'
+        SAGEMAKER_PROJECT = 'my-sagemaker-aws-jenkins-project'
         SAGEMAKER_ROLE = 'arn:aws:iam::975050337104:role/service-role/AmazonSageMaker-ExecutionRole-20250311T162664'
     }
 
