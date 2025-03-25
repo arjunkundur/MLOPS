@@ -1,29 +1,29 @@
 pipeline {
-    agent {
-        // Use a Docker agent with Python pre-installed
-        docker {
-            image 'python:3.9-slim'
-        }
-    }
+    agent any  // Use the Jenkins master node (or any available agent)
+    
     environment {
-        AWS_REGION = 'us-west-2'  // Set your AWS region
+        AWS_REGION = 'us-west-2'      // Set your AWS region
         S3_BUCKET = 'jenkinsaws-mlops3030'
     }
+
     stages {
         stage('Setup Environment') {
             steps {
-                echo 'Installing required Python libraries...'
+                echo 'Setting up Python environment and installing required libraries...'
                 sh '''
+                # Install Python dependencies globally (assuming Python and pip are already installed)
                 pip install --upgrade boto3 sagemaker pandas scikit-learn
                 '''
             }
         }
+
         stage('Clone Repository') {
             steps {
                 echo 'Cloning Git repository with SageMaker scripts...'
                 git branch: 'main', url: 'https://github.com/arjunkundur/MLOPS.git'
             }
         }
+
         stage('Run SageMaker Pipeline') {
             steps {
                 echo 'Executing SageMaker training pipeline...'
@@ -32,6 +32,7 @@ pipeline {
                 '''
             }
         }
+
         stage('Monitor SageMaker Pipeline') {
             steps {
                 echo 'Monitoring the SageMaker pipeline status...'
@@ -40,6 +41,7 @@ pipeline {
                 '''
             }
         }
+
         stage('Perform Inference') {
             steps {
                 echo 'Running inference on test data...'
@@ -49,6 +51,7 @@ pipeline {
             }
         }
     }
+
     post {
         success {
             echo 'SageMaker pipeline completed successfully!'
