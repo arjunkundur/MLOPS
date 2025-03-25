@@ -11,7 +11,7 @@ pipeline {
             steps {
                 echo 'Setting up Python environment and installing required libraries...'
                 sh '''
-                # Use python3 and pip3 explicitly if pip is not found
+                # Install required Python libraries
                 pip3 install --upgrade boto3 sagemaker pandas scikit-learn
                 '''
             }
@@ -21,6 +21,16 @@ pipeline {
             steps {
                 echo 'Cloning Git repository with SageMaker scripts...'
                 git branch: 'main', url: 'https://github.com/arjunkundur/MLOPS.git'
+            }
+        }
+
+        stage('Create SageMaker Pipeline') {
+            steps {
+                echo 'Creating SageMaker pipeline...'
+                sh '''
+                export AWS_REGION=us-west-2
+                python3 sagemaker-pipelines-train-pipeline.py
+                '''
             }
         }
 
