@@ -19,7 +19,7 @@ def main():
     training_params = {
         "TrainingJobName": training_job_name,
         "AlgorithmSpecification": {
-            "TrainingImage": "763104351884.dkr.ecr.ap-south-1.amazonaws.com/xgboost:latest",
+            "TrainingImage": "975050337104.dkr.ecr.ap-south-1.amazonaws.com/xgboost:latest",
             "TrainingInputMode": "File",
         },
         "RoleArn": args.role,
