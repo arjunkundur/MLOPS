@@ -1,0 +1,44 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_REGION = 'us-west-2'
+        SAGEMAKER_PROJECT = 'my-sagemaker-project'
+        SAGEMAKER_ROLE = 'arn:aws:iam::<your_account_id>:role/sagemaker-role'
+    }
+
+    stages {
+        stage('Checkout Code') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                sh 'pip install -r sagemaker_scripts/requirements.txt'
+            }
+        }
+
+        stage('Run SageMaker Training Job') {
+            steps {
+                sh 'python scripts/run_training.py --project $SAGEMAKER_PROJECT --region $AWS_REGION --role $SAGEMAKER_ROLE'
+            }
+        }
+
+        stage('Deploy Model') {
+            steps {
+                sh 'python scripts/deploy_model.py --project $SAGEMAKER_PROJECT --region $AWS_REGION'
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Pipeline completed successfully!'
+        }
+        failure {
+            echo 'Pipeline failed. Please check the logs.'
+        }
+    }
+}
