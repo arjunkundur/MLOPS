@@ -27,12 +27,14 @@ pipeline {
             steps {
                 script {
                     def trainingJobName = sh(script: "python3 ml-pipeline/scripts/run_training.py --project $SAGEMAKER_PROJECT --region $AWS_REGION --role $SAGEMAKER_ROLE", returnStdout: true).trim()
+
+                    // Remove any extra newlines and unintended text
+                    trainingJobName = trainingJobName.split("\n")[0].trim()
                     echo "Triggered SageMaker Training Job: ${trainingJobName}"
-                    
+
                     // Poll the SageMaker training job status
                     timeout(time: 60, unit: 'MINUTES') {
                         waitUntil {
-                            // Fix: Enclosing training job name in quotes to prevent parsing issues
                             def status = sh(script: "aws sagemaker describe-training-job --region $AWS_REGION --training-job-name '${trainingJobName}' --query 'TrainingJobStatus' --output text", returnStdout: true).trim()
                             echo "Current SageMaker Training Job Status: ${status}"
                             return status == "Completed" || status == "Failed" || status == "Stopped"
