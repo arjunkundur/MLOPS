@@ -28,6 +28,7 @@ pipeline {
             steps {
                 echo 'Executing SageMaker training pipeline...'
                 sh '''
+                export AWS_REGION=us-west-2
                 python3 sagemaker-pipelines-train-pipeline.py
                 '''
             }
