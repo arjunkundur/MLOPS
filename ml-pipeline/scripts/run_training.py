@@ -48,7 +48,8 @@ def main():
 
     # Start the training job
     response = sm_client.create_training_job(**training_params)
-    print(f"Training job initiated: {response['TrainingJobArn']}")
+    print(training_job_name)  # This will return ONLY the job name
+
 
     # Return just the training job name
     print(training_job_name)
