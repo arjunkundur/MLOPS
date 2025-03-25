@@ -32,7 +32,13 @@ def get_pipeline():
                           role=role, instance_count=1, instance_type="ml.m5.large", sagemaker_session=sagemaker_session)
     step_train = TrainingStep(name="TrainingStep", estimator=estimator)
 
-    pipeline = Pipeline(name="ark-mlops-jenkins", steps=[step_process, step_train], sagemaker_session=sagemaker_session)
+    # Create and return pipeline with role parameter
+    pipeline = Pipeline(
+        name="ark-mlops-jenkins",
+        steps=[step_process, step_train],
+        role=role,  # Pass the role to avoid the "An AWS IAM role is required" error
+        sagemaker_session=sagemaker_session
+    )
     return pipeline
 
 if __name__ == "__main__":
@@ -44,5 +50,5 @@ if __name__ == "__main__":
         print(f"Pipeline execution started with ExecutionArn: {execution.arn}")
     else:
         print("Creating SageMaker pipeline...")
-        pipeline.create()
+        pipeline.create()  # This line requires the role to be set in the pipeline initialization
         print("Pipeline created successfully!")
