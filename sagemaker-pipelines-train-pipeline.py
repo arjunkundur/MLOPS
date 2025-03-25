@@ -7,7 +7,7 @@ from sagemaker.processing import Processor
 from sagemaker.estimator import Estimator
 import os
 
-# Fetch AWS region explicitly
+# Fetch AWS region and configure session
 region = os.getenv("AWS_REGION", "us-west-2")
 if not region:
     raise ValueError("AWS_REGION must be set as an environment variable.")
@@ -15,8 +15,11 @@ if not region:
 boto_session = boto3.Session(region_name=region)
 sagemaker_session = sagemaker.Session(boto_session=boto_session)
 
-# Define SageMaker execution role
+# Define SageMaker execution role and set it in the session explicitly
 role = "AmazonSageMaker-ExecutionRole-20250311T164768"
+sagemaker_session.config = {
+    "SageMaker": {"ExecutionRoleArn": role}  # Explicitly add the role to the session config
+}
 
 print(f"Using AWS Region: {region}")
 print(f"Using SageMaker execution role: {role}")
@@ -42,7 +45,7 @@ def get_pipeline():
     )
     step_train = TrainingStep(name="TrainingStep", estimator=estimator)
 
-    # Create and return pipeline **without the role parameter** 
+    # Create pipeline **without the role parameter**, role is handled by the session
     pipeline = Pipeline(
         name="ark-mlops-jenkins",
         steps=[step_process, step_train],
