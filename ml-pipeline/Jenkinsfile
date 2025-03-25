@@ -17,19 +17,22 @@ pipeline {
 
         stage('Install Dependencies') {
             steps {
-                sh 'pip install -r sagemaker_scripts/requirements.txt'
+                sh '''
+                ls -l && pwd
+                pip3 install -r ml-pipeline/sagemaker_scripts/requirements.txt
+                '''
             }
         }
 
         stage('Run SageMaker Training Job') {
             steps {
-                sh 'python scripts/run_training.py --project $SAGEMAKER_PROJECT --region $AWS_REGION --role $SAGEMAKER_ROLE'
+                sh 'python3 ml-pipeline/scripts/run_training.py --project $SAGEMAKER_PROJECT --region $AWS_REGION --role $SAGEMAKER_ROLE'
             }
         }
 
         stage('Deploy Model') {
             steps {
-                sh 'python scripts/deploy_model.py --project $SAGEMAKER_PROJECT --region $AWS_REGION'
+                sh 'python3 ml-pipeline/scripts/deploy_model.py --project $SAGEMAKER_PROJECT --region $AWS_REGION'
             }
         }
     }
