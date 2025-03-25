@@ -12,6 +12,6 @@ boto_session = boto3.Session(region_name=region)
 sagemaker_session = sagemaker.Session(boto_session=boto_session)
 
 # Get the execution role (This assumes you're running on an environment like SageMaker Studio or EC2 with an IAM role attached)
-role = sagemaker.get_execution_role()
+role = "AmazonSageMaker-ExecutionRole-20250311T164768"
 
 print(f"Using AWS Region: {region}")
