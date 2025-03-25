@@ -2,7 +2,7 @@ import boto3
 import time
 
 # Define constants
-pipeline_name = "YOUR_PIPELINE_NAME"  # Update with your SageMaker pipeline name
+pipeline_name = "ark-mlops-jenkins"  # Update with your SageMaker pipeline name
 region = "us-west-2"  # Your AWS region
 check_interval = 60  # Time in seconds between status checks
 
