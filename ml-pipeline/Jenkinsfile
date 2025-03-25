@@ -27,8 +27,11 @@ pipeline {
             steps {
                 script {
                     def trainingJobName = sh(script: "python3 ml-pipeline/scripts/run_training.py --project $SAGEMAKER_PROJECT --region $AWS_REGION --role $SAGEMAKER_ROLE", returnStdout: true).trim()
-                    echo "Triggered SageMaker Training Job: ${trainingJobName}"
                     
+                    // Shorten job name to avoid exceeding length constraints
+                    trainingJobName = trainingJobName.take(63)
+                    echo "Triggered SageMaker Training Job: ${trainingJobName}"
+
                     // Poll the SageMaker training job status every 20 seconds
                     timeout(time: 60, unit: 'HOURS') {
                         waitUntil {
