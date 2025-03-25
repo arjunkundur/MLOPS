@@ -4,13 +4,14 @@ pipeline {
     environment {
         AWS_REGION = 'us-west-2'
         SAGEMAKER_PROJECT = 'my-sagemaker-project'
-        SAGEMAKER_ROLE = 'arn:aws:iam::<your_account_id>:role/sagemaker-role'
+        SAGEMAKER_ROLE = 'aarn:aws:iam::975050337104:role/service-role/AmazonSageMaker-ExecutionRole-20250311T162664'
     }
 
     stages {
         stage('Checkout Code') {
             steps {
-                checkout scm
+                checkout([$class: 'GitSCM', branches: [[name: '*/main']], userRemoteConfigs: [[url: 'https://github.com/arjunkundur/MLOPS.git']]])
+
             }
         }
 
