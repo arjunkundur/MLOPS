@@ -7,25 +7,21 @@ from sagemaker.processing import Processor
 from sagemaker.estimator import Estimator
 import os
 
-# Fetch AWS region and configure session
+# Fetch AWS region and role from environment or set defaults
 region = os.getenv("AWS_REGION", "us-west-2")
+role = "AmazonSageMaker-ExecutionRole-20250311T164768"
+
 if not region:
     raise ValueError("AWS_REGION must be set as an environment variable.")
 
 boto_session = boto3.Session(region_name=region)
-sagemaker_session = sagemaker.Session(boto_session=boto_session)
-
-# Define SageMaker execution role and set it in the session explicitly
-role = "AmazonSageMaker-ExecutionRole-20250311T164768"
-sagemaker_session.config = {
-    "SageMaker": {"ExecutionRoleArn": role}  # Explicitly add the role to the session config
-}
+sagemaker_session = sagemaker.Session(boto_session=boto_session, sagemaker_client=boto_session.client("sagemaker"))
 
 print(f"Using AWS Region: {region}")
 print(f"Using SageMaker execution role: {role}")
 
 def get_pipeline():
-    # Define processor step (example logic)
+    # Define processing step (example logic)
     processor = Processor(
         role=role,
         image_uri="123456789012.dkr.ecr.us-west-2.amazonaws.com/sample-image:latest",
@@ -45,11 +41,11 @@ def get_pipeline():
     )
     step_train = TrainingStep(name="TrainingStep", estimator=estimator)
 
-    # Create pipeline **without the role parameter**, role is handled by the session
+    # Create pipeline and pass `sagemaker_session` explicitly
     pipeline = Pipeline(
         name="ark-mlops-jenkins",
         steps=[step_process, step_train],
-        sagemaker_session=sagemaker_session
+        sagemaker_session=sagemaker_session  # Bind session directly
     )
     return pipeline
 
@@ -62,5 +58,5 @@ if __name__ == "__main__":
         print(f"Pipeline execution started with ExecutionArn: {execution.arn}")
     else:
         print("Creating SageMaker pipeline...")
-        pipeline.create()  # Pipeline creation
+        pipeline.create()  # Create the pipeline using session with bound role
         print("Pipeline created successfully!")
