@@ -30,7 +30,7 @@ pipeline {
                     echo "Triggered SageMaker Training Job: ${trainingJobName}"
                     
                     // Poll the SageMaker training job status every 20 seconds
-                    timeout(time: 60, unit: 'MINUTES') {  // Set a timeout for the wait
+                    timeout(time: 60, unit: 'HOURS') {  // Set a timeout for the wait
                         waitUntil {
                             def status = sh(script: "aws sagemaker describe-training-job --region $AWS_REGION --training-job-name ${trainingJobName} --query 'TrainingJobStatus' --output text", returnStdout: true).trim()
                             echo "Current SageMaker Training Job Status: ${status}"
