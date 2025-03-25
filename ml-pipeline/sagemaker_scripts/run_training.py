@@ -1,46 +1,57 @@
-import boto3
 import argparse
-
-def parse_args():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--project', required=True, help='Project name')
-    parser.add_argument('--role', required=True, help='IAM Role ARN')
-    parser.add_argument('--region', required=True, help='AWS Region')
-    return parser.parse_args()
+import boto3
+import time
 
 def main():
-    args = parse_args()
-    client = boto3.client('sagemaker', region_name=args.region)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--project', type=str, required=True, help='SageMaker project name')
+    parser.add_argument('--region', type=str, required=True, help='AWS region')
+    parser.add_argument('--role', type=str, required=True, help='SageMaker execution role ARN')
+    args = parser.parse_args()
 
-    response = client.create_training_job(
-        TrainingJobName=f"{args.project}-training",
-        AlgorithmSpecification={
-            'TrainingImage': '763104351884.dkr.ecr.us-west-2.amazonaws.com/xgboost:latest',
-            'TrainingInputMode': 'File'
+    # Initialize SageMaker client
+    sm_client = boto3.client('sagemaker', region_name=args.region)
+
+    # Define job name with timestamp to avoid collisions
+    training_job_name = f"{args.project}-training-{int(time.time())}"
+
+    # Define training job parameters (simplified; modify based on your training setup)
+    training_params = {
+        "TrainingJobName": training_job_name,
+        "AlgorithmSpecification": {
+            "TrainingImage": "763104351884.dkr.ecr.us-west-2.amazonaws.com/xgboost:latest",
+            "TrainingInputMode": "File",
         },
-        RoleArn=args.role,
-        OutputDataConfig={'S3OutputPath': f's3://{args.project}-output/'},
-        ResourceConfig={
-            'InstanceType': 'ml.m5.large',
-            'InstanceCount': 1,
-            'VolumeSizeInGB': 10
-        },
-        InputDataConfig=[
+        "RoleArn": args.role,
+        "InputDataConfig": [
             {
-                'ChannelName': 'train',
-                'DataSource': {
-                    'S3DataSource': {
-                        'S3DataType': 'S3Prefix',
-                        'S3Uri': f's3://{args.project}-train-data/',
-                        'S3DataDistributionType': 'FullyReplicated'
+                "ChannelName": "train",
+                "DataSource": {
+                    "S3DataSource": {
+                        "S3Uri": f"s3://{args.project}/train",
+                        "S3DataType": "S3Prefix",
+                        "S3DataDistributionType": "FullyReplicated",
                     }
                 },
-                'ContentType': 'text/csv'
             }
         ],
-        StoppingCondition={'MaxRuntimeInSeconds': 3600}
-    )
-    print("Training job initiated:", response)
+        "OutputDataConfig": {
+            "S3OutputPath": f"s3://{args.project}/output",
+        },
+        "ResourceConfig": {
+            "InstanceType": "ml.m5.large",
+            "InstanceCount": 1,
+            "VolumeSizeInGB": 10,
+        },
+        "StoppingCondition": {"MaxRuntimeInSeconds": 3600},
+    }
 
-if __name__ == "__main__":
+    # Start the training job
+    response = sm_client.create_training_job(**training_params)
+    print(f"Training job initiated: {response['TrainingJobArn']}")
+
+    # Return just the training job name
+    print(training_job_name)
+
+if __name__ == '__main__':
     main()
