@@ -15,7 +15,7 @@ def main():
     response = client.create_training_job(
         TrainingJobName=f"{args.project}-training",
         AlgorithmSpecification={
-            'TrainingImage': '763104351884.dkr.ecr.us-west-2.amazonaws.com/xgboost:latest',
+            'TrainingImage': '763104351884.dkr.ecr.ap-south-1.amazonaws.com/xgboost:latest',
             'TrainingInputMode': 'File'
         },
         RoleArn=args.role,
