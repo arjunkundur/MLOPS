@@ -1,5 +1,6 @@
 import boto3
 import time
+import pprint
 
 sm_client = boto3.client('sagemaker', region_name='ap-south-1')
 
@@ -37,16 +38,18 @@ training_params = {
     },
     "StoppingCondition": {"MaxRuntimeInSeconds": 3600},
 
-    # Check how hyperparameters are passed
+    # Ensuring hyperparameters are without "--"
     "HyperParameters": {
         "train": "/opt/ml/input/data/train/train.csv",
         "model-dir": "/opt/ml/model",
     }
 }
 
-# Output what is being passed to SageMaker for review
-import pprint
+# Print the parameters being passed to SageMaker
+print("Sending the following parameters to SageMaker:")
 pprint.pprint(training_params)
+print(f"\nSpecifically focusing on hyperparameters: {training_params['HyperParameters']}")
 
+# Create the training job
 response = sm_client.create_training_job(**training_params)
 print(f"Training Job created: {training_job_name}")
