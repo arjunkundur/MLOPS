@@ -1,0 +1,155 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_REGION = 'ap-south-1'
+        SAGEMAKER_PROJECT = 'my-sagemaker-aws-jenkins-project1'
+        SAGEMAKER_ROLE = 'arn:aws:iam::975050337104:role/service-role/AmazonSageMaker-ExecutionRole-20250311T162664'
+        AWS_CREDENTIALS = credentials('aws-credentials')
+        SPECIFIC_TRAINING_JOB = 'sagemaker-xgboost-2025-03-26-08-57-40-665'
+        INSTANCE_TYPE = 'ml.m5.large'
+        ENDPOINT_NAME = "${SAGEMAKER_PROJECT}-endpoint"
+        CONFIG_NAME = "${SAGEMAKER_PROJECT}-config-${currentBuild.number}"
+        PYTHON = 'python3'
+    }
+
+    stages {
+        stage('Checkout Code') {
+            steps {
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: '*/main']],
+                    extensions: [[
+                        $class: 'RelativeTargetDirectory',
+                        relativeTargetDir: 'ml-pipeline'
+                    ]],
+                    userRemoteConfigs: [[url: 'https://github.com/arjunkundur/MLOPS.git']]
+                ])
+            }
+        }
+
+        stage('Setup Environment') {
+            steps {
+                dir('ml-pipeline') {
+                    sh '''
+                    echo "Setting up Python environment"
+                    pip3 install --upgrade pip
+                    pip3 install -r sagemaker_scripts/requirements.txt
+                    pip3 install awscli boto3 sagemaker
+                    aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+                    aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
+                    aws configure set region $AWS_REGION
+                    '''
+                }
+            }
+        }
+
+        stage('Verify Training Job') {
+            steps {
+                dir('ml-pipeline') {
+                    script {
+                        echo "Verifying training job: ${SPECIFIC_TRAINING_JOB}"
+                        
+                        env.JOB_INFO = sh(
+                            script: """
+                            aws sagemaker describe-training-job \\
+                                --training-job-name ${SPECIFIC_TRAINING_JOB} \\
+                                --query '[TrainingJobStatus, ModelArtifacts.S3ModelArtifacts]' \\
+                                --output text
+                            """,
+                            returnStdout: true
+                        ).trim()
+                        
+                        def jobInfo = env.JOB_INFO.split('\t')
+                        
+                        if (jobInfo[0] != 'Completed') {
+                            error("Training job ${SPECIFIC_TRAINING_JOB} status: ${jobInfo[0]}")
+                        }
+                        echo "✅ Verified model artifacts: ${jobInfo[1]}"
+                        env.MODEL_ARTIFACTS = jobInfo[1]
+                    }
+                }
+            }
+        }
+
+        stage('Deploy Model') {
+            steps {
+                dir('ml-pipeline') {
+                    script {
+                        echo "Starting deployment to endpoint: ${ENDPOINT_NAME}"
+                        
+                        try {
+                            // Use Python script with SageMaker SDK
+                            def deployOutput = sh(
+                                script: """
+                                ${PYTHON} scripts/deploy_model.py \\
+                                    --endpoint-name ${ENDPOINT_NAME} \\
+                                    --model-data ${env.MODEL_ARTIFACTS} \\
+                                    --role-arn ${SAGEMAKER_ROLE} \\
+                                    --instance-type ${INSTANCE_TYPE} \\
+                                    --region ${AWS_REGION}
+                                """,
+                                returnStdout: true
+                            ).trim()
+                            
+                            echo "Deployment output:\n${deployOutput}"
+                            
+                            if (deployOutput.contains("❌") || deployOutput.contains("failed")) {
+                                error("Deployment script reported failure")
+                            }
+                            
+                            // Monitor endpoint status
+                            def maxAttempts = 60
+                            def interval = 30
+                            def endpointReady = false
+                            
+                            for (int i = 0; i < maxAttempts; i++) {
+                                sleep(interval)
+                                
+                                def endpointStatus = sh(
+                                    script: """
+                                    aws sagemaker describe-endpoint \\
+                                        --endpoint-name ${ENDPOINT_NAME} \\
+                                        --query 'EndpointStatus' \\
+                                        --output text
+                                    """,
+                                    returnStdout: true
+                                ).trim()
+                                
+                                echo "Endpoint status: ${endpointStatus} (attempt ${i+1}/${maxAttempts})"
+                                
+                                if (endpointStatus == 'InService') {
+                                    endpointReady = true
+                                    break
+                                } else if (endpointStatus == 'Failed') {
+                                    error("Endpoint deployment failed")
+                                }
+                            }
+                            
+                            if (!endpointReady) {
+                                error("Endpoint did not become ready within timeout period")
+                            }
+                            
+                            echo "✅ Deployment successful! Endpoint: ${ENDPOINT_NAME}"
+                            
+                        } catch (Exception e) {
+                            error("Deployment failed: ${e.getMessage()}")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            echo "Pipeline execution completed"
+        }
+        success {
+            echo "✅ Pipeline succeeded!"
+        }
+        failure {
+            echo "❌ Pipeline failed"
+        }
+    }
+}
