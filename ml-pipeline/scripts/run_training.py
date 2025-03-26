@@ -15,7 +15,7 @@ def main():
     # Define job name with timestamp to avoid collisions
     training_job_name = f"{args.project}-training-{int(time.time())}"
 
-    # Define training job parameters with corrected HyperParameters and input/output paths
+    # Define training job parameters with correctly prefixed hyperparameters
     training_params = {
         "TrainingJobName": training_job_name,
         "AlgorithmSpecification": {
@@ -28,16 +28,16 @@ def main():
                 "ChannelName": "train",
                 "DataSource": {
                     "S3DataSource": {
-                        "S3Uri": f"s3://{args.project}/train",  # Input path for training data
+                        "S3Uri": f"s3://{args.project}/train",
                         "S3DataType": "S3Prefix",
                         "S3DataDistributionType": "FullyReplicated",
                     }
                 },
-                "ContentType": "text/csv",  # Input data type
+                "ContentType": "text/csv",
             }
         ],
         "OutputDataConfig": {
-            "S3OutputPath": f"s3://{args.project}/output",  # Output path for saving results
+            "S3OutputPath": f"s3://{args.project}/output",
         },
         "ResourceConfig": {
             "InstanceType": "ml.m5.large",
@@ -46,17 +46,17 @@ def main():
         },
         "StoppingCondition": {"MaxRuntimeInSeconds": 3600},
 
-        # Pass hyperparameters without "--" (SageMaker automatically prefixes them)
+        # Corrected hyperparameters with "--" prefix
         "HyperParameters": {
-            "train": "/opt/ml/input/data/train/train.csv",   # File path for training data
-            "model-dir": "/opt/ml/model",                    # Directory to save the model
+            "--train": "/opt/ml/input/data/train/train.csv",
+            "--model-dir": "/opt/ml/model",
         }
     }
 
     # Start the training job on SageMaker
     response = sm_client.create_training_job(**training_params)
     
-    # Print the training job name
+    # Print only the job name for Jenkins
     print(training_job_name)
 
 if __name__ == '__main__':
