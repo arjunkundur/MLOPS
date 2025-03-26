@@ -1,7 +1,7 @@
 import boto3
 import argparse
 import time
-from sagemaker import image_uris  # Add this import at the top
+from sagemaker import image_uris
 
 def get_latest_model(client, training_job_name):
     """Get model artifacts from training job"""
@@ -14,7 +14,6 @@ def create_endpoint_config(client, project_name, model_data, region):
     """Create endpoint configuration for the model"""
     config_name = f"{project_name}-config-{int(time.time())}"
     
-    # Get the correct container image for the region
     container_image = image_uris.retrieve(
         framework='xgboost',
         region=region,
@@ -22,10 +21,10 @@ def create_endpoint_config(client, project_name, model_data, region):
     )
     
     client.create_model(
-        ModelName=f"{project_name}-model",
+        ModelName=f"{project_name}-model-{int(time.time())}",
         ExecutionRoleArn="arn:aws:iam::975050337104:role/service-role/AmazonSageMaker-ExecutionRole-20250311T162664",
         Containers=[{
-            'Image': container_image,  # Use the retrieved image
+            'Image': container_image,
             'ModelDataUrl': model_data,
             'Environment': {
                 'SAGEMAKER_PROGRAM': 'train.py',
@@ -38,12 +37,20 @@ def create_endpoint_config(client, project_name, model_data, region):
         EndpointConfigName=config_name,
         ProductionVariants=[{
             'VariantName': 'AllTraffic',
-            'ModelName': f"{project_name}-model",
+            'ModelName': f"{project_name}-model-{int(time.time())}",
             'InitialInstanceCount': 1,
             'InstanceType': 'ml.m5.large'
         }]
     )
     return config_name
+
+def endpoint_exists(client, endpoint_name):
+    """Check if endpoint exists"""
+    try:
+        client.describe_endpoint(EndpointName=endpoint_name)
+        return True
+    except client.exceptions.ResourceNotFound:
+        return False
 
 def main():
     parser = argparse.ArgumentParser()
@@ -53,6 +60,7 @@ def main():
     args = parser.parse_args()
     
     client = boto3.client('sagemaker', region_name=args.region)
+    endpoint_name = f"{args.project}-endpoint"
     
     # Get model artifacts from training job
     model_data = get_latest_model(client, args.training_job_name)
@@ -62,16 +70,14 @@ def main():
     config_name = create_endpoint_config(client, args.project, model_data, args.region)
     print(f"Created endpoint config: {config_name}")
     
-    # Create or update endpoint
-    endpoint_name = f"{args.project}-endpoint"
-    try:
-        client.describe_endpoint(EndpointName=endpoint_name)
+    # Handle endpoint creation/update
+    if endpoint_exists(client, endpoint_name):
         print(f"Updating existing endpoint {endpoint_name}")
         client.update_endpoint(
             EndpointName=endpoint_name,
             EndpointConfigName=config_name
         )
-    except client.exceptions.ResourceNotFound:
+    else:
         print(f"Creating new endpoint {endpoint_name}")
         client.create_endpoint(
             EndpointName=endpoint_name,
@@ -79,6 +85,8 @@ def main():
         )
     
     print(f"Deployment initiated for model from job {args.training_job_name}")
+    print(f"Endpoint: {endpoint_name}")
+    print(f"Endpoint config: {config_name}")
 
 if __name__ == "__main__":
     main()
