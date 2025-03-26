@@ -31,10 +31,9 @@ pipeline {
                     sh '''
                     echo "Setting up Python environment"
                     python3 -m venv venv
-                    . venv/bin/activate
-                    pip install --upgrade pip
-                    pip install -r sagemaker_scripts/requirements.txt
-                    pip install awscli boto3 sagemaker
+                    pip3 install --upgrade pip
+                    pip3 install -r sagemaker_scripts/requirements.txt
+                    pip3 install awscli boto3 sagemaker
                     aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
                     aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
                     aws configure set region $AWS_REGION
@@ -52,7 +51,6 @@ pipeline {
                         // Verify training job exists and is completed
                         def jobInfo = sh(
                             script: """
-                            . venv/bin/activate
                             aws sagemaker describe-training-job \\
                                 --training-job-name ${SPECIFIC_TRAINING_JOB} \\
                                 --query '[TrainingJobStatus, ModelArtifacts.S3ModelArtifacts]' \\
@@ -81,8 +79,7 @@ pipeline {
                         // Run deployment script
                         def deployOutput = sh(
                             script: """
-                            . venv/bin/activate
-                            python scripts/deploy_model.py \\
+                            python3 scripts/deploy_model.py \\
                                 --project $SAGEMAKER_PROJECT \\
                                 --region $AWS_REGION \\
                                 --training-job-name $SPECIFIC_TRAINING_JOB \\
@@ -110,7 +107,6 @@ pipeline {
                             
                             def endpointStatus = sh(
                                 script: """
-                                . venv/bin/activate
                                 aws sagemaker describe-endpoint \\
                                     --endpoint-name ${endpointName} \\
                                     --query 'EndpointStatus' \\
@@ -125,7 +121,6 @@ pipeline {
                                 // Verify model name contains training job ID
                                 def modelName = sh(
                                     script: """
-                                    . venv/bin/activate
                                     aws sagemaker describe-endpoint \\
                                         --endpoint-name ${endpointName} \\
                                         --query 'ProductionVariants[0].ModelName' \\
