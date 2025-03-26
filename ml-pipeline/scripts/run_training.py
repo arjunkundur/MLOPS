@@ -15,7 +15,7 @@ def main():
     # Define job name with timestamp to avoid collisions
     training_job_name = f"{args.project}-training-{int(time.time())}"
 
-    # Define training job parameters (simplified; modify based on your training setup)
+    # Define training job parameters with updated HyperParameters
     training_params = {
         "TrainingJobName": training_job_name,
         "AlgorithmSpecification": {
@@ -33,6 +33,7 @@ def main():
                         "S3DataDistributionType": "FullyReplicated",
                     }
                 },
+                "ContentType": "text/csv",  # Define input content type
             }
         ],
         "OutputDataConfig": {
@@ -44,15 +45,19 @@ def main():
             "VolumeSizeInGB": 10,
         },
         "StoppingCondition": {"MaxRuntimeInSeconds": 3600},
+
+        # Adding hyperparameters for train.py
+        "HyperParameters": {
+            "train": "/opt/ml/input/data/train",   # Path inside the container for train data
+            "model-dir": "/opt/ml/model",          # Path inside the container for saving model
+        }
     }
 
     # Start the training job
     response = sm_client.create_training_job(**training_params)
-    print(training_job_name)  # This will return ONLY the job name
-
-
-    # Return just the training job name
-    print(training_job_name)
+    
+    # Print training job name
+    print(f"Training job initiated: {training_job_name}")
 
 if __name__ == '__main__':
     main()
