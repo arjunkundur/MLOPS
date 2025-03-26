@@ -15,7 +15,7 @@ def main():
     # Define job name with timestamp to avoid collisions
     training_job_name = f"{args.project}-training-{int(time.time())}"
 
-    # Define training job parameters with updated HyperParameters (removed -- prefix)
+    # Define training job parameters with corrected HyperParameters and input/output paths
     training_params = {
         "TrainingJobName": training_job_name,
         "AlgorithmSpecification": {
@@ -28,16 +28,16 @@ def main():
                 "ChannelName": "train",
                 "DataSource": {
                     "S3DataSource": {
-                        "S3Uri": f"s3://{args.project}/train",
+                        "S3Uri": f"s3://{args.project}/train",  # Input path for training data
                         "S3DataType": "S3Prefix",
                         "S3DataDistributionType": "FullyReplicated",
                     }
                 },
-                "ContentType": "text/csv",  # Define input content type
+                "ContentType": "text/csv",  # Input data type
             }
         ],
         "OutputDataConfig": {
-            "S3OutputPath": f"s3://{args.project}/output",
+            "S3OutputPath": f"s3://{args.project}/output",  # Output path for saving results
         },
         "ResourceConfig": {
             "InstanceType": "ml.m5.large",
@@ -46,18 +46,18 @@ def main():
         },
         "StoppingCondition": {"MaxRuntimeInSeconds": 3600},
 
-        # Pass hyperparameters correctly (without "--")
+        # Pass hyperparameters without "--" (SageMaker automatically prefixes them)
         "HyperParameters": {
-            "train": "/opt/ml/input/data/train/data.csv",   # SageMaker will map to --train argument
-            "model-dir": "/opt/ml/model",                   # SageMaker will map to --model-dir argument
+            "train": "/opt/ml/input/data/train/train.csv",   # File path for training data
+            "model-dir": "/opt/ml/model",                    # Directory to save the model
         }
     }
 
-    # Start the training job
+    # Start the training job on SageMaker
     response = sm_client.create_training_job(**training_params)
     
-    # Print training job name
-    print(f"Training job initiated: {training_job_name}")
+    # Print the training job name
+    print(training_job_name)
 
 if __name__ == '__main__':
     main()
