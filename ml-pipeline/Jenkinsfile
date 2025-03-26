@@ -5,20 +5,29 @@ pipeline {
         AWS_REGION = 'ap-south-1'
         SAGEMAKER_PROJECT = 'my-sagemaker-aws-jenkins-project1'
         SAGEMAKER_ROLE = 'arn:aws:iam::975050337104:role/service-role/AmazonSageMaker-ExecutionRole-20250311T162664'
+        AWS_CREDENTIALS = credentials('aws-credentials')  // Ensure you have AWS credentials configured in Jenkins
     }
 
     stages {
         stage('Checkout Code') {
             steps {
-                checkout([$class: 'GitSCM', branches: [[name: '*/main']], userRemoteConfigs: [[url: 'https://github.com/arjunkundur/MLOPS.git']]])
+                checkout([$class: 'GitSCM', 
+                         branches: [[name: '*/main']], 
+                         userRemoteConfigs: [[url: 'https://github.com/arjunkundur/MLOPS.git']]])
             }
         }
 
-        stage('Install Dependencies') {
+        stage('Setup Environment') {
             steps {
                 sh '''
-                ls -l && pwd
-                pip3 install -r ml-pipeline/sagemaker_scripts/requirements.txt
+                echo "Setting up Python environment"
+                python3 -m venv venv
+                . venv/bin/activate
+                pip install -r ml-pipeline/sagemaker_scripts/requirements.txt
+                pip install awscli boto3
+                aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+                aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
+                aws configure set region $AWS_REGION
                 '''
             }
         }
@@ -26,25 +35,70 @@ pipeline {
         stage('Run SageMaker Training Job') {
             steps {
                 script {
-                    def trainingJobName = sh(script: "python3 ml-pipeline/scripts/run_training.py --project $SAGEMAKER_PROJECT --region $AWS_REGION --role $SAGEMAKER_ROLE", returnStdout: true).trim()
+                    echo "Starting SageMaker training job"
+                    def trainingJobName = sh(
+                        script: 'python3 ml-pipeline/scripts/run_training.py', 
+                        returnStdout: true
+                    ).trim()
+                    
                     echo "Triggered SageMaker Training Job: ${trainingJobName}"
+                    
+                    // Wait for job completion (up to 10 minutes)
+                    def maxAttempts = 60
+                    def interval = 10
+                    def jobStatus = ''
+                    
+                    for (int i = 0; i < maxAttempts; i++) {
+                        sleep(interval)
+                        jobStatus = sh(
+                            script: """
+                            aws sagemaker describe-training-job \
+                            --training-job-name ${trainingJobName} \
+                            --query 'TrainingJobStatus' \
+                            --output text
+                            """,
+                            returnStdout: true
+                        ).trim()
+                        
+                        echo "Training job status: ${jobStatus}"
+                        
+                        if (jobStatus == 'Completed') {
+                            echo "Training job completed successfully"
+                            break
+                        } else if (jobStatus == 'Failed' || jobStatus == 'Stopped') {
+                            error("Training job failed with status: ${jobStatus}")
+                        }
+                    }
+                    
+                    if (jobStatus != 'Completed') {
+                        error("Training job did not complete within the expected time")
+                    }
                 }
             }
         }
 
         stage('Deploy Model') {
             steps {
-                sh 'python3 ml-pipeline/scripts/deploy_model.py --project $SAGEMAKER_PROJECT --region $AWS_REGION'
+                sh '''
+                . venv/bin/activate
+                python3 ml-pipeline/scripts/deploy_model.py --project $SAGEMAKER_PROJECT --region $AWS_REGION
+                '''
             }
         }
     }
 
     post {
+        always {
+            echo "Pipeline execution completed"
+            // Add any cleanup steps here
+        }
         success {
-            echo 'Pipeline completed successfully!'
+            echo "Pipeline succeeded!"
+            // Add notification steps here
         }
         failure {
-            echo 'Pipeline failed. Please check the logs.'
+            echo "Pipeline failed"
+            // Add failure notification steps here
         }
     }
 }
