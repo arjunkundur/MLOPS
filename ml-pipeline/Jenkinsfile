@@ -51,6 +51,64 @@ pipeline {
             }
         }
 
+        stage('Run SageMaker Training Job') {
+            steps {
+                dir('ml-pipeline') {
+                    script {
+                        echo "Starting SageMaker training job"
+                        
+                        // Activate venv and run training
+                        def trainingJobName = sh(
+                            script: '''
+                            cd scripts
+                            # python3 run_training_sm.py
+                            ''', 
+                            returnStdout: true
+                        ).trim()
+                        
+                        echo "Triggered SageMaker Training Job: ${trainingJobName}"
+                        env.TRAINING_JOB_NAME = trainingJobName
+
+                        // Monitor job status with enhanced debugging
+                        def maxAttempts = 120
+                        def interval = 30
+                        def jobStatus = ''
+                        
+                        for (int i = 0; i < maxAttempts; i++) {
+                            sleep(interval)
+                            
+                            def result = sh(
+                                script: """
+                            aws sagemaker describe-training-job \\
+                            --training-job-name ${trainingJobName} \\
+                            --query 'FailureReason' \\
+                            --output text 2>&1
+                                """,
+                                returnStdout: true
+                            ).trim().split('\t')
+                            
+                            jobStatus = result[0]
+                            def failureReason = result.size() > 1 ? result[1] : ''
+                            
+                            echo "Training job status: ${jobStatus}"
+                            
+                            if (jobStatus == 'Completed') {
+                                echo "Training job completed successfully"
+                                break
+                            } else if (jobStatus == 'Failed' || jobStatus == 'Stopped') {
+                                error("Training job failed: ${failureReason}")
+                            }
+                        }
+                        
+                        if (jobStatus != 'Completed') {
+                            error("Training job did not complete within the expected time")
+                        }
+                    }
+                }
+            }
+        }
+
+
         stage('Verify Training Job') {
             steps {
                 dir('ml-pipeline') {

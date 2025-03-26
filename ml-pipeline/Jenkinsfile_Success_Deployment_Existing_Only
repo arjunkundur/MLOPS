@@ -1,3 +1,15 @@
+// Checkout code from GitHub repository
+
+// Set up Python environment and AWS CLI configuration
+
+// Verify SageMaker training job status (EXISTING) and model artifacts
+
+// Deploy the trained model to a SageMaker endpoint
+
+// Monitor deployment and endpoint status
+
+// Log pipeline success or failure
+
 pipeline {
     agent any
 
