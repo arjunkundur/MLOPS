@@ -11,6 +11,8 @@ pipeline {
         ENDPOINT_NAME = "${SAGEMAKER_PROJECT}-endpoint"
         CONFIG_NAME = "${SAGEMAKER_PROJECT}-config-${currentBuild.number}"
         PYTHON = 'python3'
+        // Official SageMaker XGBoost image for ap-south-1
+        XGBOOST_IMAGE = '257758044811.dkr.ecr.ap-south-1.amazonaws.com/sagemaker-xgboost:1.5-1'
     }
 
     stages {
@@ -34,7 +36,7 @@ pipeline {
                     sh '''
                     echo "Setting up Python environment"
                     pip3 install --upgrade pip
-                    pip3 install -r sagemaker_scripts/requirements.txt
+                    pip3 install -r requirements.txt
                     pip3 install awscli boto3 sagemaker
                     aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
                     aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
@@ -50,7 +52,6 @@ pipeline {
                     script {
                         echo "Verifying training job: ${SPECIFIC_TRAINING_JOB}"
                         
-                        // Store the output in an environment variable
                         env.JOB_INFO = sh(
                             script: """
                             aws sagemaker describe-training-job \\
@@ -67,8 +68,6 @@ pipeline {
                             error("Training job ${SPECIFIC_TRAINING_JOB} status: ${jobInfo[0]}")
                         }
                         echo "✅ Verified model artifacts: ${jobInfo[1]}"
-                        
-                        // Store model artifacts path for later stages
                         env.MODEL_ARTIFACTS = jobInfo[1]
                     }
                 }
@@ -81,15 +80,23 @@ pipeline {
                     script {
                         echo "Creating model configuration: ${CONFIG_NAME}"
                         
+                        // Create Model
                         sh """
                         aws sagemaker create-model \\
                             --model-name ${SAGEMAKER_PROJECT}-model-${currentBuild.number} \\
                             --execution-role-arn ${SAGEMAKER_ROLE} \\
                             --primary-container '{
-                                "Image": "683313688378.dkr.ecr.ap-south-1.amazonaws.com/sagemaker-xgboost:1.5-1",
-                                "ModelDataUrl": "${env.MODEL_ARTIFACTS}"
+                                "Image": "${XGBOOST_IMAGE}",
+                                "ModelDataUrl": "${env.MODEL_ARTIFACTS}",
+                                "Environment": {
+                                    "SAGEMAKER_PROGRAM": "xgboost_train.py",
+                                    "SAGEMAKER_SUBMIT_DIRECTORY": "${env.MODEL_ARTIFACTS}"
+                                }
                             }'
+                        """
                         
+                        // Create Endpoint Config
+                        sh """
                         aws sagemaker create-endpoint-config \\
                             --endpoint-config-name ${CONFIG_NAME} \\
                             --production-variants '[
@@ -114,6 +121,7 @@ pipeline {
                         echo "Starting deployment to endpoint: ${ENDPOINT_NAME}"
                         
                         try {
+                            // Use the improved deploy_model.py script
                             def deployOutput = sh(
                                 script: """
                                 ${PYTHON} scripts/deploy_model.py \\
@@ -130,18 +138,40 @@ pipeline {
                                 error("Deployment script reported failure")
                             }
                             
-                            // Get final endpoint info
-                            def endpointInfo = sh(
-                                script: """
-                                aws sagemaker describe-endpoint \\
-                                    --endpoint-name ${ENDPOINT_NAME} \\
-                                    --query 'EndpointArn' \\
-                                    --output text
-                                """,
-                                returnStdout: true
-                            ).trim()
+                            // Verify deployment
+                            def endpointStatus = ""
+                            def attempts = 0
+                            def maxAttempts = 30
+                            def interval = 30
                             
-                            echo "✅ Deployment successful! Endpoint ARN: ${endpointInfo}"
+                            while (attempts < maxAttempts) {
+                                attempts++
+                                sleep(interval)
+                                
+                                endpointStatus = sh(
+                                    script: """
+                                    aws sagemaker describe-endpoint \\
+                                        --endpoint-name ${ENDPOINT_NAME} \\
+                                        --query 'EndpointStatus' \\
+                                        --output text
+                                    """,
+                                    returnStdout: true
+                                ).trim()
+                                
+                                echo "Endpoint status: ${endpointStatus} (attempt ${attempts}/${maxAttempts})"
+                                
+                                if (endpointStatus == 'InService') {
+                                    break
+                                } else if (endpointStatus == 'Failed') {
+                                    error("Endpoint deployment failed")
+                                }
+                            }
+                            
+                            if (endpointStatus != 'InService') {
+                                error("Endpoint did not reach InService status within timeout")
+                            }
+                            
+                            echo "✅ Deployment successful! Endpoint: ${ENDPOINT_NAME}"
                             
                         } catch (Exception e) {
                             error("Deployment failed: ${e.getMessage()}")
