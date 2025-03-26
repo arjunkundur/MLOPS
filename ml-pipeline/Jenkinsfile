@@ -28,11 +28,9 @@ pipeline {
                 dir('ml-pipeline') {
                     sh '''
                     echo "Setting up Python environment"
-                    python3 -m venv venv
-                    . venv/bin/activate
-                    pip install --upgrade pip
-                    pip install -r sagemaker_scripts/requirements.txt
-                    pip install awscli boto3 sagemaker
+                    pip3 install --upgrade pip
+                    pip3 install -r sagemaker_scripts/requirements.txt
+                    pip3 install awscli boto3 sagemaker
                     aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
                     aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
                     aws configure set region $AWS_REGION
@@ -63,9 +61,8 @@ pipeline {
                         // Activate venv and run training
                         def trainingJobName = sh(
                             script: '''
-                            . venv/bin/activate
                             cd scripts
-                            python run_training_sm.py
+                            python3 run_training_sm.py
                             ''', 
                             returnStdout: true
                         ).trim()
@@ -83,7 +80,6 @@ pipeline {
                             
                             def result = sh(
                                 script: """
-                                . venv/bin/activate
                                 aws sagemaker describe-training-job \
                                 --training-job-name ${trainingJobName} \
                                 --query '[TrainingJobStatus, FailureReason]' \
@@ -119,8 +115,7 @@ pipeline {
                     script {
                         echo "Deploying model from job: ${env.TRAINING_JOB_NAME}"
                         sh '''
-                        . venv/bin/activate
-                        python scripts/deploy_model.py \
+                        python3 scripts/deploy_model.py \
                             --project $SAGEMAKER_PROJECT \
                             --region $AWS_REGION \
                             --training-job-name $TRAINING_JOB_NAME
@@ -135,7 +130,7 @@ pipeline {
         always {
             echo "Pipeline execution completed"
             dir('ml-pipeline') {
-                sh 'rm -rf venv'
+                sh 'Hello'
             }
         }
         success {
