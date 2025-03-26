@@ -1,18 +1,27 @@
-# Base image
+# Use official SageMaker base image or a lightweight Python image
 FROM python:3.8-slim
 
-# Install required system packages, including gcc and other build tools
-RUN apt-get update && apt-get install -y gcc build-essential
+# Set environment variables (SageMaker paths for training)
+ENV PYTHONUNBUFFERED=TRUE \
+    PATH="/opt/ml/code:/usr/local/bin:${PATH}" \
+    TRAINING_PATH="/opt/ml/input/data/train.csv" \
+    MODEL_PATH="/opt/ml/model"
 
-# Install Python packages
-RUN pip install --upgrade pip
-RUN pip install xgboost pandas sagemaker-training
+# Install core dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copy the training code
-COPY train.py /opt/ml/code/train.py
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --upgrade pip && pip install -r requirements.txt
 
-# Set the working directory
+# Create the SageMaker required folder structure
+RUN mkdir -p /opt/ml/code /opt/ml/input/data /opt/ml/model
 WORKDIR /opt/ml/code
 
-# Set the entry point for training
-ENTRYPOINT ["python", "train.py"]
+# Copy training script and any additional dependencies
+COPY train.py .
+
+# Define the entry point for the container
+ENTRYPOINT ["python3", "train.py"]
