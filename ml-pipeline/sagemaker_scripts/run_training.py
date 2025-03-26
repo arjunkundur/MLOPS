@@ -15,7 +15,7 @@ def main():
     # Define job name with timestamp to avoid collisions
     training_job_name = f"{args.project}-training-{int(time.time())}"
 
-    # Define training job parameters with updated HyperParameters
+    # Define training job parameters with updated HyperParameters (removed -- prefix)
     training_params = {
         "TrainingJobName": training_job_name,
         "AlgorithmSpecification": {
@@ -46,10 +46,10 @@ def main():
         },
         "StoppingCondition": {"MaxRuntimeInSeconds": 3600},
 
-        # Adding correct hyperparameters for train.py
+        # Pass hyperparameters correctly (without "--")
         "HyperParameters": {
-            "--train": "/opt/ml/input/data/train/data.csv",   # This correctly maps to `--train` argument in train.py
-            "--model-dir": "/opt/ml/model",                   # This correctly maps to `--model-dir` argument
+            "train": "/opt/ml/input/data/train/data.csv",   # SageMaker will map to --train argument
+            "model-dir": "/opt/ml/model",                   # SageMaker will map to --model-dir argument
         }
     }
 
