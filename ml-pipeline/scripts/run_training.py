@@ -37,18 +37,19 @@ training_params = {
         "VolumeSizeInGB": 10,
     },
     "StoppingCondition": {"MaxRuntimeInSeconds": 3600},
-
-    # Ensuring hyperparameters are without "--"
+    
+    # Only include actual XGBoost hyperparameters here
     "HyperParameters": {
-        "train": "/opt/ml/input/data/train/train.csv",
-        "model-dir": "/opt/ml/model",
+        "num_round": "10",
+        "objective": "binary:logistic",
+        "max_depth": "5",
+        "eta": "0.2"
     }
 }
 
 # Print the parameters being passed to SageMaker
 print("Sending the following parameters to SageMaker:")
 pprint.pprint(training_params)
-print(f"\nSpecifically focusing on hyperparameters: {training_params['HyperParameters']}")
 
 # Create the training job
 response = sm_client.create_training_job(**training_params)
