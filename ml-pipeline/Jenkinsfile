@@ -80,10 +80,10 @@ pipeline {
                             
                             def result = sh(
                                 script: """
-                                aws sagemaker describe-training-job \
-                                --training-job-name ${trainingJobName} \
-                                --query '[TrainingJobStatus, FailureReason]' \
-                                --output text
+                            aws sagemaker describe-training-job \\
+                            --training-job-name ${trainingJobName} \\
+                            --query 'FailureReason' \\
+                            --output text 2>&1
                                 """,
                                 returnStdout: true
                             ).trim().split('\t')
