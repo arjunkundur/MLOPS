@@ -82,7 +82,7 @@ pipeline {
                             // Use Python script with SageMaker SDK
                             def deployOutput = sh(
                                 script: """
-                                ${PYTHON} sagemaker_scripts/deploy_model.py \\
+                                ${PYTHON} scripts/deploy_model.py \\
                                     --endpoint-name ${ENDPOINT_NAME} \\
                                     --model-data ${env.MODEL_ARTIFACTS} \\
                                     --role-arn ${SAGEMAKER_ROLE} \\
