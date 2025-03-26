@@ -3,3 +3,4 @@ xgboost
 joblib
 scikit-learn
 boto3
+sagemaker>=2.0.0

@@ -1,49 +1,32 @@
 import pandas as pd
-import os
 import xgboost as xgb
+import os
 import argparse
 
-def model_training(train_data_path, model_output_path):
-    try:
-        # Explicitly check for sklearn
-        from sklearn.base import is_classifier
-        print("scikit-learn is available")
-    except ImportError:
-        print("ERROR: scikit-learn is required but not installed")
-        raise
-
-    try:
-        # Load and preprocess data
-        data = pd.read_csv(train_data_path)
-        X = data.iloc[:, :-1]
-        y = data.iloc[:, -1]
-
-        # Initialize XGBoost classifier with updated parameters
-        model = xgb.XGBClassifier(
-            objective='binary:logistic',
-            eval_metric='logloss',
-            n_estimators=10,
-            max_depth=5,
-            learning_rate=0.2
-        )
-        
-        # Train model
-        model.fit(X, y)
-
-        # Ensure output directory exists
-        os.makedirs(model_output_path, exist_ok=True)
-        
-        # Save model
-        model.save_model(os.path.join(model_output_path, "xgboost-model.json"))
-        print("Training completed successfully!")
-        
-    except Exception as e:
-        print(f"Training failed: {str(e)}")
-        raise
+def train():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--train', type=str, default='/opt/ml/input/data/train')
+    parser.add_argument('--model-dir', type=str, default='/opt/ml/model')
+    args = parser.parse_args()
+    
+    # Load training data
+    train_data = pd.read_csv(os.path.join(args.train, 'train.csv'))
+    X_train = train_data.iloc[:, :-1]
+    y_train = train_data.iloc[:, -1]
+    
+    # Train model
+    model = xgb.XGBClassifier(
+        objective='binary:logistic',
+        eval_metric='logloss',
+        n_estimators=10,
+        max_depth=5,
+        learning_rate=0.2
+    )
+    model.fit(X_train, y_train)
+    
+    # Save model
+    os.makedirs(args.model_dir, exist_ok=True)
+    model.save_model(os.path.join(args.model_dir, 'xgboost-model.json'))
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--train', type=str, required=True)
-    parser.add_argument('--model-dir', type=str, required=True)
-    args = parser.parse_args()
-    model_training(args.train, args.model_dir)
+    train()

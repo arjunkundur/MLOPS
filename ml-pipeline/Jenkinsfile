@@ -5,7 +5,7 @@ pipeline {
         AWS_REGION = 'ap-south-1'
         SAGEMAKER_PROJECT = 'my-sagemaker-aws-jenkins-project1'
         SAGEMAKER_ROLE = 'arn:aws:iam::975050337104:role/service-role/AmazonSageMaker-ExecutionRole-20250311T162664'
-        AWS_CREDENTIALS = credentials('aws-credentials')  // Ensure you have AWS credentials configured in Jenkins
+        AWS_CREDENTIALS = credentials('aws-credentials')
     }
 
     stages {
@@ -22,7 +22,7 @@ pipeline {
                 sh '''
                 echo "Setting up Python environment"
                 pip3 install -r ml-pipeline/sagemaker_scripts/requirements.txt
-                pip3 install awscli boto3
+                pip3 install awscli boto3 sagemaker
                 aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
                 aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
                 aws configure set region $AWS_REGION
@@ -34,20 +34,32 @@ pipeline {
             steps {
                 script {
                     echo "Starting SageMaker training job"
+                    
+                    // Install dependencies in the virtual environment
+                    sh '''
+                    pip3 install sagemaker
+                    '''
+                    
+                    // Run the training job using SageMaker SDK
                     def trainingJobName = sh(
-                        script: 'python3 ml-pipeline/scripts/run_training.py', 
+                        script: '''
+                        python3 ml-pipeline/scripts/run_training_sm.py
+                        ''', 
                         returnStdout: true
                     ).trim()
                     
                     echo "Triggered SageMaker Training Job: ${trainingJobName}"
                     
-                    // Wait for job completion (up to 10 minutes)
-                    def maxAttempts = 60
-                    def interval = 10
+                    // Enhanced job monitoring with error details
+                    def maxAttempts = 120  // 20 minutes max (30s interval)
+                    def interval = 30
                     def jobStatus = ''
+                    def failureReason = ''
                     
                     for (int i = 0; i < maxAttempts; i++) {
                         sleep(interval)
+                        
+                        // Get job status
                         jobStatus = sh(
                             script: """
                             aws sagemaker describe-training-job \
@@ -58,29 +70,50 @@ pipeline {
                             returnStdout: true
                         ).trim()
                         
+                        // Get failure reason if job failed
+                        if (jobStatus == 'Failed') {
+                            failureReason = sh(
+                                script: """
+                                aws sagemaker describe-training-job \
+                                --training-job-name ${trainingJobName} \
+                                --query 'FailureReason' \
+                                --output text
+                                """,
+                                returnStdout: true
+                            ).trim()
+                        }
+                        
                         echo "Training job status: ${jobStatus}"
                         
                         if (jobStatus == 'Completed') {
                             echo "Training job completed successfully"
                             break
                         } else if (jobStatus == 'Failed' || jobStatus == 'Stopped') {
-                            error("Training job failed with status: ${jobStatus}")
+                            error("Training job failed: ${failureReason}")
                         }
                     }
                     
                     if (jobStatus != 'Completed') {
                         error("Training job did not complete within the expected time")
                     }
+                    
+                    // Store the job name for deployment
+                    env.TRAINING_JOB_NAME = trainingJobName
                 }
             }
         }
 
         stage('Deploy Model') {
             steps {
-                sh '''
-                . venv/bin/activate
-                python3 ml-pipeline/scripts/deploy_model.py --project $SAGEMAKER_PROJECT --region $AWS_REGION
-                '''
+                script {
+                    echo "Deploying model from job: ${env.TRAINING_JOB_NAME}"
+                    sh '''
+                    python3 ml-pipeline/scripts/deploy_model.py \
+                        --project $SAGEMAKER_PROJECT \
+                        --region $AWS_REGION \
+                        --training-job-name $TRAINING_JOB_NAME
+                    '''
+                }
             }
         }
     }
@@ -88,15 +121,17 @@ pipeline {
     post {
         always {
             echo "Pipeline execution completed"
-            // Add any cleanup steps here
+            // Clean up virtual environment
+            sh 'rm -rf venv'
         }
         success {
             echo "Pipeline succeeded!"
-            // Add notification steps here
+            // Example notification
         }
         failure {
             echo "Pipeline failed"
-            // Add failure notification steps here
+            // Example notification
+
         }
     }
 }
