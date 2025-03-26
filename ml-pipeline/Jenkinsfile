@@ -81,7 +81,7 @@ pipeline {
                             def result = sh(
                                 script: """
                             aws sagemaker describe-training-job \\
-                            --training-job-name ${trainingJobName} \\
+                            --training-job-name ${jobStatus} \\
                             --query 'FailureReason' \\
                             --output text 2>&1
                                 """,
