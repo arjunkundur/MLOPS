@@ -11,6 +11,8 @@ pipeline {
         ENDPOINT_NAME = "${SAGEMAKER_PROJECT}-endpoint"
         CONFIG_NAME = "${SAGEMAKER_PROJECT}-config-${currentBuild.number}"
         PYTHON = 'python3'
+        // Predefined XGBoost image for ap-south-1
+        XGBOOST_IMAGE = '257758044811.dkr.ecr.ap-south-1.amazonaws.com/sagemaker-xgboost:1.5-1'
     }
 
     stages {
@@ -78,27 +80,18 @@ pipeline {
                     script {
                         echo "Creating model configuration: ${CONFIG_NAME}"
                         
-                        // Get the correct container image for this region
-                        def image_uri = sh(
-                            script: """
-                            aws sagemaker describe-algorithm \\
-                                --algorithm-name xgboost \\
-                                --query 'TrainingSpecification.TrainingImage' \\
-                                --output text
-                            """,
-                            returnStdout: true
-                        ).trim()
-                        
-                        echo "Using container image: ${image_uri}"
-                        
-                        // Create Model
+                        // Create Model using predefined XGBoost image
                         sh """
                         aws sagemaker create-model \\
                             --model-name ${SAGEMAKER_PROJECT}-model-${currentBuild.number} \\
                             --execution-role-arn ${SAGEMAKER_ROLE} \\
                             --primary-container '{
-                                "Image": "${image_uri}",
-                                "ModelDataUrl": "${env.MODEL_ARTIFACTS}"
+                                "Image": "${XGBOOST_IMAGE}",
+                                "ModelDataUrl": "${env.MODEL_ARTIFACTS}",
+                                "Environment": {
+                                    "SAGEMAKER_PROGRAM": "xgboost_train.py",
+                                    "SAGEMAKER_SUBMIT_DIRECTORY": "${env.MODEL_ARTIFACTS}"
+                                }
                             }'
                         """
                         
