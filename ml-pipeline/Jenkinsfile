@@ -30,7 +30,6 @@ pipeline {
                 dir('ml-pipeline') {
                     sh '''
                     echo "Setting up Python environment"
-                    python3 -m venv venv
                     pip3 install --upgrade pip
                     pip3 install -r sagemaker_scripts/requirements.txt
                     pip3 install awscli boto3 sagemaker
