@@ -46,10 +46,10 @@ def main():
         },
         "StoppingCondition": {"MaxRuntimeInSeconds": 3600},
 
-        # Adding hyperparameters for train.py
+        # Adding correct hyperparameters for train.py
         "HyperParameters": {
-            "train": "/opt/ml/input/data/train",   # Path inside the container for train data
-            "model-dir": "/opt/ml/model",          # Path inside the container for saving model
+            "--train": "/opt/ml/input/data/train/data.csv",   # This correctly maps to `--train` argument in train.py
+            "--model-dir": "/opt/ml/model",                   # This correctly maps to `--model-dir` argument
         }
     }
 
