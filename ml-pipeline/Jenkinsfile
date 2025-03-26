@@ -21,10 +21,8 @@ pipeline {
             steps {
                 sh '''
                 echo "Setting up Python environment"
-                python3 -m venv venv
-                . venv/bin/activate
-                pip install -r ml-pipeline/sagemaker_scripts/requirements.txt
-                pip install awscli boto3
+                pip3 install -r ml-pipeline/sagemaker_scripts/requirements.txt
+                pip3 install awscli boto3
                 aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
                 aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
                 aws configure set region $AWS_REGION
