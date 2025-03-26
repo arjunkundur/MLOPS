@@ -13,10 +13,10 @@ def main():
     boto_session = boto3.Session(region_name=region)
     sagemaker_session = Session(boto_session=boto_session)
     
-    # Create estimator
+    # Create estimator - NOTE THE CORRECT PARAMETER NAME
     estimator = XGBoost(
-        entry_script='train.py',
-        framework_version='1.3-1',  # Latest stable version
+        entry_point='train.py',  # Changed from entry_script to entry_point
+        framework_version='1.3-1',
         py_version='py3',
         instance_type='ml.m5.large',
         instance_count=1,
