@@ -29,11 +29,9 @@ pipeline {
                 dir('ml-pipeline') {
                     sh '''
                     echo "Setting up Python environment"
-                    python3 -m venv venv
-                    . venv/bin/activate
-                    pip install --upgrade pip
-                    pip install -r sagemaker_scripts/requirements.txt
-                    pip install awscli boto3 sagemaker
+                    pip3 install --upgrade pip
+                    pip3 install -r sagemaker_scripts/requirements.txt
+                    pip3 install awscli boto3 sagemaker
                     aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
                     aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
                     aws configure set region $AWS_REGION
@@ -50,7 +48,6 @@ pipeline {
                         
                         def jobStatus = sh(
                             script: """
-                            . venv/bin/activate
                             aws sagemaker describe-training-job \\
                                 --training-job-name ${SPECIFIC_TRAINING_JOB} \\
                                 --query 'TrainingJobStatus' \\
@@ -65,7 +62,6 @@ pipeline {
                         
                         def modelData = sh(
                             script: """
-                            . venv/bin/activate
                             aws sagemaker describe-training-job \\
                                 --training-job-name ${SPECIFIC_TRAINING_JOB} \\
                                 --query 'ModelArtifacts.S3ModelArtifacts' \\
@@ -88,8 +84,7 @@ pipeline {
                         echo "Deploying SPECIFIC model from job: ${SPECIFIC_TRAINING_JOB}"
                         
                         sh """
-                        . venv/bin/activate
-                        python scripts/deploy_model.py \\
+                        python3 scripts/deploy_model.py \\
                             --project $SAGEMAKER_PROJECT \\
                             --region $AWS_REGION \\
                             --training-job-name $SPECIFIC_TRAINING_JOB
@@ -104,7 +99,6 @@ pipeline {
                             
                             def endpointInfo = sh(
                                 script: """
-                                . venv/bin/activate
                                 aws sagemaker describe-endpoint \\
                                     --endpoint-name ${SAGEMAKER_PROJECT}-endpoint \\
                                     --query '[EndpointStatus, ProductionVariants[0].ModelName]' \\
@@ -119,7 +113,7 @@ pipeline {
                             echo "Endpoint status: ${endpointStatus}, Model: ${modelName}"
                             
                             if (endpointStatus == 'InService') {
-                                if (!modelName.contains(SPECIFIC_TRAINING_JOB[-8:])) {
+                                if (!modelName.contains(SPECIFIC_TRAINING_JOB.substring(SPECIFIC_TRAINING_JOB.length() - 8))) {
                                     error("Deployed model verification failed! Wrong model detected")
                                 }
                                 echo "Successfully deployed model from ${SPECIFIC_TRAINING_JOB}"
@@ -143,11 +137,9 @@ pipeline {
         }
         success {
             echo "Pipeline succeeded!"
-            // slackSend(color: 'good', message: "SUCCESS: ${env.JOB_NAME} #${env.BUILD_NUMBER}")
         }
         failure {
             echo "Pipeline failed"
-            // slackSend(color: 'danger', message: "FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}")
         }
     }
 }
