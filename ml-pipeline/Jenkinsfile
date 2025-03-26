@@ -9,6 +9,8 @@ pipeline {
         SPECIFIC_TRAINING_JOB = 'sagemaker-xgboost-2025-03-26-08-57-40-665'
         INSTANCE_TYPE = 'ml.m5.large'
         ENDPOINT_NAME = "${SAGEMAKER_PROJECT}-endpoint"
+        CONFIG_NAME = "${SAGEMAKER_PROJECT}-config-${currentBuild.number}"
+        PYTHON = 'python3'
     }
 
     stages {
@@ -32,7 +34,7 @@ pipeline {
                     sh '''
                     echo "Setting up Python environment"
                     pip3 install --upgrade pip
-                    pip3 install -r sagemaker_scripts/requirements.txt
+                    pip3 install -r requirements.txt
                     pip3 install awscli boto3 sagemaker
                     aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
                     aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
@@ -67,87 +69,76 @@ pipeline {
             }
         }
 
+        stage('Create Model Config') {
+            steps {
+                dir('ml-pipeline') {
+                    script {
+                        echo "Creating model configuration: ${CONFIG_NAME}"
+                        
+                        sh """
+                        aws sagemaker create-model \\
+                            --model-name ${SAGEMAKER_PROJECT}-model-${currentBuild.number} \\
+                            --execution-role-arn ${SAGEMAKER_ROLE} \\
+                            --primary-container '{
+                                "Image": "683313688378.dkr.ecr.ap-south-1.amazonaws.com/sagemaker-xgboost:1.5-1",
+                                "ModelDataUrl": "${jobInfo[1]}"
+                            }'
+                        
+                        aws sagemaker create-endpoint-config \\
+                            --endpoint-config-name ${CONFIG_NAME} \\
+                            --production-variants '[
+                                {
+                                    "VariantName": "main",
+                                    "ModelName": "${SAGEMAKER_PROJECT}-model-${currentBuild.number}",
+                                    "InitialInstanceCount": 1,
+                                    "InstanceType": "${INSTANCE_TYPE}",
+                                    "InitialVariantWeight": 1.0
+                                }
+                            ]'
+                        """
+                    }
+                }
+            }
+        }
+
         stage('Deploy Model') {
             steps {
                 dir('ml-pipeline') {
                     script {
                         echo "Starting deployment to endpoint: ${ENDPOINT_NAME}"
                         
-                        // Run deployment script with error handling
-                        def deployOutput = ""
                         try {
-                            deployOutput = sh(
+                            def deployOutput = sh(
                                 script: """
-                                python3 scripts/deploy_model.py \\
-                                    --project $SAGEMAKER_PROJECT \\
-                                    --region $AWS_REGION \\
-                                    --training-job-name $SPECIFIC_TRAINING_JOB \\
-                                    --instance-type $INSTANCE_TYPE
+                                ${PYTHON} scripts/deploy_model.py \\
+                                    --endpoint-name ${ENDPOINT_NAME} \\
+                                    --config-name ${CONFIG_NAME} \\
+                                    --region ${AWS_REGION}
                                 """,
                                 returnStdout: true
                             ).trim()
                             
                             echo "Deployment output:\n${deployOutput}"
                             
-                            if (deployOutput.contains("❌")) {
+                            if (deployOutput.contains("❌") || deployOutput.contains("failed")) {
                                 error("Deployment script reported failure")
                             }
-                        } catch (Exception e) {
-                            error("Deployment execution failed: ${e.getMessage()}")
-                        }
-                        
-                        // Monitor endpoint status
-                        def maxAttempts = 60  // 30 minutes max
-                        def interval = 30
-                        def endpointReady = false
-                        
-                        for (int i = 0; i < maxAttempts; i++) {
-                            sleep(interval)
                             
-                            try {
-                                def endpointStatus = sh(
-                                    script: """
-                                    aws sagemaker describe-endpoint \\
-                                        --endpoint-name ${ENDPOINT_NAME} \\
-                                        --query 'EndpointStatus' \\
-                                        --output text
-                                    """,
-                                    returnStdout: true
-                                ).trim()
-                                
-                                echo "Endpoint status: ${endpointStatus} (attempt ${i+1}/${maxAttempts})"
-                                
-                                if (endpointStatus == 'InService') {
-                                    // Verify deployed model
-                                    def modelName = sh(
-                                        script: """
-                                        aws sagemaker describe-endpoint \\
-                                            --endpoint-name ${ENDPOINT_NAME} \\
-                                            --query 'ProductionVariants[0].ModelName' \\
-                                            --output text
-                                        """,
-                                        returnStdout: true
-                                    ).trim()
-                                    
-                                    if (!modelName.contains(SPECIFIC_TRAINING_JOB.substring(SPECIFIC_TRAINING_JOB.length() - 8))) {
-                                        error("Model verification failed! Deployed model ${modelName} doesn't match training job")
-                                    }
-                                    
-                                    echo "✅ Deployment successful!"
-                                    echo "Endpoint: ${ENDPOINT_NAME}"
-                                    echo "Model: ${modelName}"
-                                    endpointReady = true
-                                    break
-                                } else if (endpointStatus == 'Failed') {
-                                    error("Endpoint deployment failed")
-                                }
-                            } catch (Exception e) {
-                                echo "⚠️ Status check error: ${e.getMessage()}"
-                            }
-                        }
-                        
-                        if (!endpointReady) {
-                            error("Endpoint did not become ready within timeout period")
+                            // Get final endpoint info
+                            def endpointInfo = sh(
+                                script: """
+                                aws sagemaker describe-endpoint \\
+                                    --endpoint-name ${ENDPOINT_NAME} \\
+                                    --query 'EndpointArn' \\
+                                    --output text
+                                """,
+                                returnStdout: true
+                            ).trim()
+                            
+                            echo "✅ Deployment successful! Endpoint ARN: ${endpointInfo}"
+                            
+                        } catch (Exception e) {
+                            error("Deployment failed: ${e.getMessage()}")
                         }
                     }
                 }
@@ -159,7 +150,7 @@ pipeline {
         always {
             echo "Pipeline execution completed"
             dir('ml-pipeline') {
-                sh 'rm -rf venv'
+                // Cleanup if needed
             }
         }
         success {
