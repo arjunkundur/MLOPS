@@ -1,6 +1,5 @@
 import boto3
 import time
-import pprint
 
 def main():
     sm_client = boto3.client('sagemaker', region_name='ap-south-1')
@@ -14,7 +13,7 @@ def main():
         "AlgorithmSpecification": {
             "TrainingImage": "975050337104.dkr.ecr.ap-south-1.amazonaws.com/xgboost:latest",
             "TrainingInputMode": "File",
-            "ContainerArguments": [  # THIS IS CRUCIAL
+            "ContainerArguments": [
                 "--train", "/opt/ml/input/data/train/train.csv",
                 "--model-dir", "/opt/ml/model"
             ]
@@ -42,12 +41,9 @@ def main():
         "StoppingCondition": {
             "MaxRuntimeInSeconds": 86400
         },
-        "HyperParameters": {
-            "num_round": "10",
-            "objective": "binary:logistic",
-            "max_depth": "5",
-            "eta": "0.2",
-            "verbosity": "1"
+        "Environment": {
+            "PYTHONPATH": "/usr/local/bin",
+            "SKLEARN_VERSION": "1.0.2"  # Specify sklearn version
         }
     }
 
