@@ -11,8 +11,6 @@ pipeline {
         ENDPOINT_NAME = "${SAGEMAKER_PROJECT}-endpoint"
         CONFIG_NAME = "${SAGEMAKER_PROJECT}-config-${currentBuild.number}"
         PYTHON = 'python3'
-        // Official SageMaker XGBoost image for ap-south-1
-        XGBOOST_IMAGE = '257758044811.dkr.ecr.ap-south-1.amazonaws.com/sagemaker-xgboost:1.5-1'
     }
 
     stages {
@@ -80,18 +78,27 @@ pipeline {
                     script {
                         echo "Creating model configuration: ${CONFIG_NAME}"
                         
+                        // Get the correct container image for this region
+                        def image_uri = sh(
+                            script: """
+                            aws sagemaker describe-algorithm \\
+                                --algorithm-name xgboost \\
+                                --query 'TrainingSpecification.TrainingImage' \\
+                                --output text
+                            """,
+                            returnStdout: true
+                        ).trim()
+                        
+                        echo "Using container image: ${image_uri}"
+                        
                         // Create Model
                         sh """
                         aws sagemaker create-model \\
                             --model-name ${SAGEMAKER_PROJECT}-model-${currentBuild.number} \\
                             --execution-role-arn ${SAGEMAKER_ROLE} \\
                             --primary-container '{
-                                "Image": "${XGBOOST_IMAGE}",
-                                "ModelDataUrl": "${env.MODEL_ARTIFACTS}",
-                                "Environment": {
-                                    "SAGEMAKER_PROGRAM": "xgboost_train.py",
-                                    "SAGEMAKER_SUBMIT_DIRECTORY": "${env.MODEL_ARTIFACTS}"
-                                }
+                                "Image": "${image_uri}",
+                                "ModelDataUrl": "${env.MODEL_ARTIFACTS}"
                             }'
                         """
                         
@@ -121,10 +128,9 @@ pipeline {
                         echo "Starting deployment to endpoint: ${ENDPOINT_NAME}"
                         
                         try {
-                            // Use the improved deploy_model.py script
                             def deployOutput = sh(
                                 script: """
-                                ${PYTHON} scripts/deploy_model.py \\
+                                ${PYTHON} sagemaker_scripts/deploy_model.py \\
                                     --endpoint-name ${ENDPOINT_NAME} \\
                                     --config-name ${CONFIG_NAME} \\
                                     --region ${AWS_REGION}
@@ -138,17 +144,15 @@ pipeline {
                                 error("Deployment script reported failure")
                             }
                             
-                            // Verify deployment
-                            def endpointStatus = ""
-                            def attempts = 0
-                            def maxAttempts = 30
+                            // Monitor endpoint status
+                            def maxAttempts = 60
                             def interval = 30
+                            def endpointReady = false
                             
-                            while (attempts < maxAttempts) {
-                                attempts++
+                            for (int i = 0; i < maxAttempts; i++) {
                                 sleep(interval)
                                 
-                                endpointStatus = sh(
+                                def endpointStatus = sh(
                                     script: """
                                     aws sagemaker describe-endpoint \\
                                         --endpoint-name ${ENDPOINT_NAME} \\
@@ -158,17 +162,18 @@ pipeline {
                                     returnStdout: true
                                 ).trim()
                                 
-                                echo "Endpoint status: ${endpointStatus} (attempt ${attempts}/${maxAttempts})"
+                                echo "Endpoint status: ${endpointStatus} (attempt ${i+1}/${maxAttempts})"
                                 
                                 if (endpointStatus == 'InService') {
+                                    endpointReady = true
                                     break
                                 } else if (endpointStatus == 'Failed') {
                                     error("Endpoint deployment failed")
                                 }
                             }
                             
-                            if (endpointStatus != 'InService') {
-                                error("Endpoint did not reach InService status within timeout")
+                            if (!endpointReady) {
+                                error("Endpoint did not become ready within timeout period")
                             }
                             
                             echo "✅ Deployment successful! Endpoint: ${ENDPOINT_NAME}"
@@ -185,17 +190,12 @@ pipeline {
     post {
         always {
             echo "Pipeline execution completed"
-            dir('ml-pipeline') {
-                // Cleanup if needed
-            }
         }
         success {
             echo "✅ Pipeline succeeded!"
-            // slackSend(color: 'good', message: "SUCCESS: ${env.JOB_NAME} #${env.BUILD_NUMBER}")
         }
         failure {
             echo "❌ Pipeline failed"
-            // slackSend(color: 'danger', message: "FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}")
         }
     }
 }
