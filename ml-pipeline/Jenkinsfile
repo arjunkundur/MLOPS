@@ -41,7 +41,7 @@ pipeline {
                     echo "Setting up Python environment"
                     pip3 install --upgrade pip
                     ls -l && pwd
-                    pip3 install -r sagemaker_scripts/requirements.txt
+                    pip3 install -r ml-pipeline/sagemaker_scripts/requirements.txt
                     pip3 install awscli boto3 sagemaker
                     aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
                     aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
