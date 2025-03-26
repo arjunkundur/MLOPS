@@ -60,7 +60,7 @@ pipeline {
                         // Activate venv and run training
                         def trainingJobName = sh(
                             script: '''
-                            cd scripts
+                            cd ml-pipeline/scripts
                             # python3 run_training_sm.py
                             ''', 
                             returnStdout: true
