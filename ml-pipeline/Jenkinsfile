@@ -34,7 +34,7 @@ pipeline {
                     sh '''
                     echo "Setting up Python environment"
                     pip3 install --upgrade pip
-                    pip3 install -r sagemaker_scripts/requirements.txt
+                    pip3 install -r requirements.txt
                     pip3 install awscli boto3 sagemaker
                     aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
                     aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
@@ -50,7 +50,8 @@ pipeline {
                     script {
                         echo "Verifying training job: ${SPECIFIC_TRAINING_JOB}"
                         
-                        def jobInfo = sh(
+                        // Store the output in an environment variable
+                        env.JOB_INFO = sh(
                             script: """
                             aws sagemaker describe-training-job \\
                                 --training-job-name ${SPECIFIC_TRAINING_JOB} \\
@@ -58,12 +59,17 @@ pipeline {
                                 --output text
                             """,
                             returnStdout: true
-                        ).trim().split('\t')
+                        ).trim()
+                        
+                        def jobInfo = env.JOB_INFO.split('\t')
                         
                         if (jobInfo[0] != 'Completed') {
                             error("Training job ${SPECIFIC_TRAINING_JOB} status: ${jobInfo[0]}")
                         }
                         echo "✅ Verified model artifacts: ${jobInfo[1]}"
+                        
+                        // Store model artifacts path for later stages
+                        env.MODEL_ARTIFACTS = jobInfo[1]
                     }
                 }
             }
@@ -81,7 +87,7 @@ pipeline {
                             --execution-role-arn ${SAGEMAKER_ROLE} \\
                             --primary-container '{
                                 "Image": "683313688378.dkr.ecr.ap-south-1.amazonaws.com/sagemaker-xgboost:1.5-1",
-                                "ModelDataUrl": "${jobInfo[1]}"
+                                "ModelDataUrl": "${env.MODEL_ARTIFACTS}"
                             }'
                         
                         aws sagemaker create-endpoint-config \\
