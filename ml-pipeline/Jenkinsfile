@@ -11,8 +11,6 @@ pipeline {
         ENDPOINT_NAME = "${SAGEMAKER_PROJECT}-endpoint"
         CONFIG_NAME = "${SAGEMAKER_PROJECT}-config-${currentBuild.number}"
         PYTHON = 'python3'
-        // Predefined XGBoost image for ap-south-1
-        XGBOOST_IMAGE = '257758044811.dkr.ecr.ap-south-1.amazonaws.com/sagemaker-xgboost:1.5-1'
     }
 
     stages {
@@ -74,46 +72,6 @@ pipeline {
             }
         }
 
-        stage('Create Model Config') {
-            steps {
-                dir('ml-pipeline') {
-                    script {
-                        echo "Creating model configuration: ${CONFIG_NAME}"
-                        
-                        // Create Model using predefined XGBoost image
-                        sh """
-                        aws sagemaker create-model \\
-                            --model-name ${SAGEMAKER_PROJECT}-model-${currentBuild.number} \\
-                            --execution-role-arn ${SAGEMAKER_ROLE} \\
-                            --primary-container '{
-                                "Image": "${XGBOOST_IMAGE}",
-                                "ModelDataUrl": "${env.MODEL_ARTIFACTS}",
-                                "Environment": {
-                                    "SAGEMAKER_PROGRAM": "xgboost_train.py",
-                                    "SAGEMAKER_SUBMIT_DIRECTORY": "${env.MODEL_ARTIFACTS}"
-                                }
-                            }'
-                        """
-                        
-                        // Create Endpoint Config
-                        sh """
-                        aws sagemaker create-endpoint-config \\
-                            --endpoint-config-name ${CONFIG_NAME} \\
-                            --production-variants '[
-                                {
-                                    "VariantName": "main",
-                                    "ModelName": "${SAGEMAKER_PROJECT}-model-${currentBuild.number}",
-                                    "InitialInstanceCount": 1,
-                                    "InstanceType": "${INSTANCE_TYPE}",
-                                    "InitialVariantWeight": 1.0
-                                }
-                            ]'
-                        """
-                    }
-                }
-            }
-        }
-
         stage('Deploy Model') {
             steps {
                 dir('ml-pipeline') {
@@ -121,11 +79,14 @@ pipeline {
                         echo "Starting deployment to endpoint: ${ENDPOINT_NAME}"
                         
                         try {
+                            // Use Python script with SageMaker SDK
                             def deployOutput = sh(
                                 script: """
                                 ${PYTHON} sagemaker_scripts/deploy_model.py \\
                                     --endpoint-name ${ENDPOINT_NAME} \\
-                                    --config-name ${CONFIG_NAME} \\
+                                    --model-data ${env.MODEL_ARTIFACTS} \\
+                                    --role-arn ${SAGEMAKER_ROLE} \\
+                                    --instance-type ${INSTANCE_TYPE} \\
                                     --region ${AWS_REGION}
                                 """,
                                 returnStdout: true
