@@ -39,8 +39,8 @@ training_params = {
 
     # Check how hyperparameters are passed
     "HyperParameters": {
-        "--train": "/opt/ml/input/data/train/train.csv",
-        "--model-dir": "/opt/ml/model",
+        "train": "/opt/ml/input/data/train/train.csv",
+        "model-dir": "/opt/ml/model",
     }
 }
 
