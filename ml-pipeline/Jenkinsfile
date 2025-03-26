@@ -7,6 +7,7 @@ pipeline {
         SAGEMAKER_ROLE = 'arn:aws:iam::975050337104:role/service-role/AmazonSageMaker-ExecutionRole-20250311T162664'
         AWS_CREDENTIALS = credentials('aws-credentials')
         SPECIFIC_TRAINING_JOB = 'sagemaker-xgboost-2025-03-26-08-57-40-665'
+        INSTANCE_TYPE = 'ml.m5.large'
     }
 
     stages {
@@ -29,9 +30,11 @@ pipeline {
                 dir('ml-pipeline') {
                     sh '''
                     echo "Setting up Python environment"
-                    pip3 install --upgrade pip
-                    pip3 install -r sagemaker_scripts/requirements.txt
-                    pip3 install awscli boto3 sagemaker
+                    python3 -m venv venv
+                    . venv/bin/activate
+                    pip install --upgrade pip
+                    pip install -r sagemaker_scripts/requirements.txt
+                    pip install awscli boto3 sagemaker
                     aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
                     aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
                     aws configure set region $AWS_REGION
@@ -46,32 +49,24 @@ pipeline {
                     script {
                         echo "Verifying training job: ${SPECIFIC_TRAINING_JOB}"
                         
-                        def jobStatus = sh(
+                        // Verify training job exists and is completed
+                        def jobInfo = sh(
                             script: """
+                            . venv/bin/activate
                             aws sagemaker describe-training-job \\
                                 --training-job-name ${SPECIFIC_TRAINING_JOB} \\
-                                --query 'TrainingJobStatus' \\
+                                --query '[TrainingJobStatus, ModelArtifacts.S3ModelArtifacts]' \\
                                 --output text
                             """,
                             returnStdout: true
-                        ).trim()
+                        ).trim().split('\t')
                         
-                        if (jobStatus != 'Completed') {
-                            error("Training job ${SPECIFIC_TRAINING_JOB} status: ${jobStatus}")
+                        if (jobInfo[0] != 'Completed') {
+                            error("Training job ${SPECIFIC_TRAINING_JOB} status: ${jobInfo[0]}")
                         }
                         
-                        def modelData = sh(
-                            script: """
-                            aws sagemaker describe-training-job \\
-                                --training-job-name ${SPECIFIC_TRAINING_JOB} \\
-                                --query 'ModelArtifacts.S3ModelArtifacts' \\
-                                --output text
-                            """,
-                            returnStdout: true
-                        ).trim()
-                        
-                        echo "Verified model artifacts: ${modelData}"
-                        env.MODEL_DATA_URL = modelData
+                        echo "Verified model artifacts: ${jobInfo[1]}"
+                        env.MODEL_DATA_URL = jobInfo[1]
                     }
                 }
             }
@@ -81,42 +76,69 @@ pipeline {
             steps {
                 dir('ml-pipeline') {
                     script {
-                        echo "Deploying SPECIFIC model from job: ${SPECIFIC_TRAINING_JOB}"
+                        echo "Deploying model from job: ${SPECIFIC_TRAINING_JOB}"
                         
-                        sh """
-                        python3 scripts/deploy_model.py \\
-                            --project $SAGEMAKER_PROJECT \\
-                            --region $AWS_REGION \\
-                            --training-job-name $SPECIFIC_TRAINING_JOB
-                        """
+                        // Run deployment script
+                        def deployOutput = sh(
+                            script: """
+                            . venv/bin/activate
+                            python scripts/deploy_model.py \\
+                                --project $SAGEMAKER_PROJECT \\
+                                --region $AWS_REGION \\
+                                --training-job-name $SPECIFIC_TRAINING_JOB \\
+                                --instance-type $INSTANCE_TYPE
+                            """,
+                            returnStdout: true
+                        ).trim()
                         
-                        // Verify deployment
+                        echo "${deployOutput}"
+                        
+                        // Extract endpoint name
+                        def endpointName = sh(
+                            script: """
+                            echo "${deployOutput}" | grep '^Endpoint: ' | awk '{print \$2}'
+                            """,
+                            returnStdout: true
+                        ).trim()
+                        
+                        // Monitor endpoint status
                         def maxAttempts = 60
                         def interval = 30
                         
                         for (int i = 0; i < maxAttempts; i++) {
                             sleep(interval)
                             
-                            def endpointInfo = sh(
+                            def endpointStatus = sh(
                                 script: """
+                                . venv/bin/activate
                                 aws sagemaker describe-endpoint \\
-                                    --endpoint-name ${SAGEMAKER_PROJECT}-endpoint \\
-                                    --query '[EndpointStatus, ProductionVariants[0].ModelName]' \\
+                                    --endpoint-name ${endpointName} \\
+                                    --query 'EndpointStatus' \\
                                     --output text
                                 """,
                                 returnStdout: true
-                            ).trim().split('\t')
+                            ).trim()
                             
-                            def endpointStatus = endpointInfo[0]
-                            def modelName = endpointInfo.size() > 1 ? endpointInfo[1] : ''
-                            
-                            echo "Endpoint status: ${endpointStatus}, Model: ${modelName}"
+                            echo "Endpoint status: ${endpointStatus}"
                             
                             if (endpointStatus == 'InService') {
+                                // Verify model name contains training job ID
+                                def modelName = sh(
+                                    script: """
+                                    . venv/bin/activate
+                                    aws sagemaker describe-endpoint \\
+                                        --endpoint-name ${endpointName} \\
+                                        --query 'ProductionVariants[0].ModelName' \\
+                                        --output text
+                                    """,
+                                    returnStdout: true
+                                ).trim()
+                                
                                 if (!modelName.contains(SPECIFIC_TRAINING_JOB.substring(SPECIFIC_TRAINING_JOB.length() - 8))) {
-                                    error("Deployed model verification failed! Wrong model detected")
+                                    error("Deployed model verification failed! Expected model from ${SPECIFIC_TRAINING_JOB}")
                                 }
-                                echo "Successfully deployed model from ${SPECIFIC_TRAINING_JOB}"
+                                
+                                echo "Successfully deployed model: ${modelName}"
                                 break
                             } else if (endpointStatus == 'Failed') {
                                 error("Endpoint deployment failed")
@@ -137,9 +159,11 @@ pipeline {
         }
         success {
             echo "Pipeline succeeded!"
+            // slackSend(color: 'good', message: "SUCCESS: ${env.JOB_NAME} #${env.BUILD_NUMBER}")
         }
         failure {
             echo "Pipeline failed"
+            // slackSend(color: 'danger', message: "FAILED: ${env.JOB_NAME} #${env.BUILD_NUMBER}")
         }
     }
 }
