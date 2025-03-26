@@ -16,13 +16,7 @@ pipeline {
     stages {
         stage('Clean Workspace') {
             steps {
-                cleanWs(
-                    cleanWhenAborted: true,
-                    cleanWhenFailure: true,
-                    cleanWhenNotBuilt: true,
-                    cleanWhenUnstable: true,
-                    deleteDirs: true
-                )
+                cleanWs()
             }
         }
 
@@ -46,6 +40,7 @@ pipeline {
                     sh '''
                     echo "Setting up Python environment"
                     pip3 install --upgrade pip
+                    ls -l && pwd
                     pip3 install -r sagemaker_scripts/requirements.txt
                     pip3 install awscli boto3 sagemaker
                     aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
